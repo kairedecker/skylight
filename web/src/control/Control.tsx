@@ -283,6 +283,9 @@ export function Control() {
           <Row label="Satellites & ISS">
             <Toggle value={cfg.showSatellites} onChange={(v) => set({ showSatellites: v })} />
           </Row>
+          <Row label="Planets">
+            <Toggle value={cfg.showPlanets} onChange={(v) => set({ showPlanets: v })} />
+          </Row>
           <Row label="Star density">
             <Slider value={cfg.starMagLimit} min={1} max={4} step={0.1}
               onChange={(v) => set({ starMagLimit: v })} />

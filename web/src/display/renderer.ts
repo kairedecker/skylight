@@ -34,6 +34,14 @@ import { ASTERISMS } from "./stars.js";
 /** How far in the past we render, ms. Just over the ~1 Hz fix interval. */
 const RENDER_DELAY_MS = 1150;
 
+const PLANET_COLORS: Record<string, [number, number, number]> = {
+  Mercury: [200, 200, 200],
+  Venus: [255, 240, 210],
+  Mars: [255, 130, 90],
+  Jupiter: [255, 220, 170],
+  Saturn: [230, 210, 150],
+};
+
 interface Sample {
   t: number; // performance.now() at arrival
   m: Meters;
@@ -110,7 +118,7 @@ export class Renderer {
 
   // Sky layer state.
   private tles: Tle[] = [];
-  private sky: Sky = { stars: [], sats: [] };
+  private sky: Sky = { stars: [], sats: [], planets: [] };
   private skyComputedAt = 0;
   private skyOffsetUsed = NaN;
 
@@ -485,9 +493,9 @@ export class Renderer {
 
   // --- sky layer (sun / moon / stars / satellites) ---
   private updateSky(cfg: Config, now: number): void {
-    const want = cfg.showStars || cfg.showSun || cfg.showMoon || cfg.showSatellites;
+    const want = cfg.showStars || cfg.showSun || cfg.showMoon || cfg.showSatellites || cfg.showPlanets;
     if (!want) {
-      this.sky = { stars: [], sats: [] };
+      this.sky = { stars: [], sats: [], planets: [] };
       return;
     }
     if (now - this.skyComputedAt < 300 && this.skyOffsetUsed === cfg.skyTimeOffsetMin) return;
@@ -499,6 +507,7 @@ export class Renderer {
       moon: cfg.showMoon,
       stars: cfg.showStars,
       satellites: cfg.showSatellites,
+      planets: cfg.showPlanets,
       magLimit: cfg.starMagLimit,
       tles: this.tles,
     });
@@ -563,6 +572,31 @@ export class Renderer {
     }
     if (cfg.showSun && this.sky.sun && this.sky.sun.alt > -2) {
       this.drawSun(this.projectSky(this.sky.sun.az, this.sky.sun.alt, cfg, proj), b);
+    }
+    if (cfg.showPlanets && this.sky.planets.length) {
+      for (const pl of this.sky.planets) {
+        const p = this.projectSky(pl.az, pl.alt, cfg, proj);
+        const [r, g, bl] = PLANET_COLORS[pl.name ?? ""] ?? [220, 225, 240];
+        const mag = pl.mag ?? 1;
+        const size = Math.max(1.6, 3.4 - mag * 0.7);
+        ctx.save();
+        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size * 4);
+        grad.addColorStop(0, `rgba(${r},${g},${bl},${0.35 * b})`);
+        grad.addColorStop(1, `rgba(${r},${g},${bl},0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${bl},${b})`;
+        ctx.fill();
+        ctx.restore();
+        if (pl.name) {
+          this.skyLabel({ x: p.x + size + 4, y: p.y - size - 2 }, pl.name, cfg,
+            0.75 * b, `rgb(${r},${g},${bl})`);
+        }
+      }
     }
     if (cfg.showSatellites && this.sky.sats.length) {
       for (const sat of this.sky.sats) {

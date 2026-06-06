@@ -10,7 +10,7 @@ import { STARS } from "./stars.js";
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 
-export type SkyKind = "sun" | "moon" | "star" | "satellite" | "iss";
+export type SkyKind = "sun" | "moon" | "star" | "satellite" | "iss" | "planet";
 
 export interface SkyBody {
   kind: SkyKind;
@@ -34,6 +34,7 @@ export interface Sky {
   moon?: SkyBody;
   stars: SkyBody[];
   sats: SkyBody[];
+  planets: SkyBody[];
 }
 
 export interface SkyOpts {
@@ -41,9 +42,18 @@ export interface SkyOpts {
   moon: boolean;
   stars: boolean;
   satellites: boolean;
+  planets: boolean;
   magLimit: number;
   tles: Tle[];
 }
+
+const NAKED_EYE_PLANETS: { body: Astronomy.Body; name: string }[] = [
+  { body: Astronomy.Body.Mercury, name: "Mercury" },
+  { body: Astronomy.Body.Venus, name: "Venus" },
+  { body: Astronomy.Body.Mars, name: "Mars" },
+  { body: Astronomy.Body.Jupiter, name: "Jupiter" },
+  { body: Astronomy.Body.Saturn, name: "Saturn" },
+];
 
 function norm360(d: number): number {
   return ((d % 360) + 360) % 360;
@@ -90,7 +100,7 @@ function getSatrec(tle: Tle): satellite.SatRec | null {
 
 export function computeSky(date: Date, latDeg: number, lonDeg: number, o: SkyOpts): Sky {
   const observer = new Astronomy.Observer(latDeg, lonDeg, 0);
-  const sky: Sky = { stars: [], sats: [] };
+  const sky: Sky = { stars: [], sats: [], planets: [] };
 
   if (o.sun) {
     const { az, alt } = bodyAltAz(Astronomy.Body.Sun, date, observer);
@@ -109,6 +119,19 @@ export function computeSky(date: Date, latDeg: number, lonDeg: number, o: SkyOpt
       const { az, alt } = starAltAz(s.ra, s.dec, lst, latDeg);
       if (alt < -2) continue; // below horizon
       sky.stars.push({ kind: "star", id: s.id, name: s.name, az, alt, mag: s.mag });
+    }
+  }
+  if (o.planets) {
+    for (const { body, name } of NAKED_EYE_PLANETS) {
+      const { az, alt } = bodyAltAz(body, date, observer);
+      if (alt < -2) continue;
+      let mag: number | undefined;
+      try {
+        mag = Astronomy.Illumination(body, date).mag;
+      } catch {
+        mag = undefined;
+      }
+      sky.planets.push({ kind: "planet", name, az, alt, mag });
     }
   }
   if (o.satellites && o.tles.length) {
