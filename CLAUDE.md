@@ -22,6 +22,16 @@ pnpm start
 pnpm typecheck
 ```
 
+```bash
+# Docker (builds on the target machine, e.g. Raspberry Pi)
+docker compose up --build -d   # build + start in background
+docker compose logs -f          # follow logs
+docker compose down             # stop
+
+# Sync upstream changes into the fork
+git fetch origin && git rebase origin/main && git push mine main --force-with-lease
+```
+
 No test suite exists yet.
 
 The Vite dev server (`web`, port 5173) proxies `/api` and `/ws` to the Express server (port 3000). Display: `http://localhost:5173/`, control panel: `http://localhost:5173/control.html`.
