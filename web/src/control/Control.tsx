@@ -20,6 +20,29 @@ function fmtIn(ms: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+function CoordInput({ value, min, max, onChange }: {
+  value: number; min: number; max: number; onChange: (v: number) => void;
+}) {
+  const [local, setLocal] = useState(String(value));
+  useEffect(() => setLocal(String(value)), [value]);
+  return (
+    <input
+      className="coord-input"
+      type="number"
+      value={local}
+      min={min}
+      max={max}
+      step={0.0001}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        const n = parseFloat(local);
+        if (!isNaN(n) && n >= min && n <= max) onChange(n);
+        else setLocal(String(value));
+      }}
+    />
+  );
+}
+
 const FIELD_LABELS: Record<keyof ShowFields, string> = {
   airline: "Airline",
   flight: "Flight",
@@ -88,6 +111,17 @@ export function Control() {
       </header>
 
       <main>
+        <Section title="Location">
+          <Row label="Latitude" hint="-90 … 90">
+            <CoordInput value={cfg.centerLat} min={-90} max={90}
+              onChange={(v) => set({ centerLat: v })} />
+          </Row>
+          <Row label="Longitude" hint="-180 … 180">
+            <CoordInput value={cfg.centerLon} min={-180} max={180}
+              onChange={(v) => set({ centerLon: v })} />
+          </Row>
+        </Section>
+
         <Section title="Calibration">
           <Row label="Rotation" hint="align field to ceiling">
             <Slider value={cfg.rotationDeg} min={0} max={355} step={5} unit="°"
