@@ -87,6 +87,8 @@ export interface Config {
   // --- labels ---
   labelDensity: LabelDensity;
   nearestN: number;
+  /** Font size for aircraft label title line (px). Sub-lines scale at 0.8×. */
+  labelSizePx: number;
   showFields: ShowFields;
 
   // --- overlays ---
@@ -159,6 +161,7 @@ export const DEFAULT_CONFIG: Config = {
 
   labelDensity: "all",
   nearestN: 5,
+  labelSizePx: 14,
   showFields: {
     airline: true,
     flight: true,

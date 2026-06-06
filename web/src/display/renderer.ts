@@ -769,10 +769,12 @@ export class Renderer {
     lines: { text: string; kind: "title" | "sub" }[],
   ): { w: number; lh: number; h: number } {
     const ctx = this.ctx;
-    const lh = 16;
+    const titlePx = cfg.labelSizePx;
+    const subPx = Math.round(cfg.labelSizePx * 0.8);
+    const lh = Math.round(cfg.labelSizePx * 1.2);
     let w = 0;
     for (const ln of lines) {
-      ctx.font = ln.kind === "title" ? `500 14px ${cfg.fonts.label}` : `400 11px ${cfg.fonts.label}`;
+      ctx.font = ln.kind === "title" ? `500 ${titlePx}px ${cfg.fonts.label}` : `400 ${subPx}px ${cfg.fonts.label}`;
       try {
         ctx.letterSpacing = ln.kind === "title" ? "1.5px" : "0.5px";
       } catch {
@@ -892,9 +894,11 @@ export class Renderer {
       ctx.shadowColor = "rgba(0,0,0,0.9)";
       ctx.shadowBlur = 6;
       let y = box.y;
+      const titlePx = cfg.labelSizePx;
+      const subPx = Math.round(cfg.labelSizePx * 0.8);
       for (const ln of lines) {
         if (ln.kind === "title") {
-          ctx.font = `500 14px ${cfg.fonts.label}`;
+          ctx.font = `500 ${titlePx}px ${cfg.fonts.label}`;
           ctx.fillStyle = rgba([245, 247, 255], a);
           try {
             ctx.letterSpacing = "1.5px";
@@ -902,7 +906,7 @@ export class Renderer {
             /* noop */
           }
         } else {
-          ctx.font = `400 11px ${cfg.fonts.label}`;
+          ctx.font = `400 ${subPx}px ${cfg.fonts.label}`;
           ctx.fillStyle = rgba(hexToRgb(cfg.palette.text), 0.82 * a);
           try {
             ctx.letterSpacing = "0.5px";

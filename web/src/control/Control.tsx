@@ -191,6 +191,10 @@ export function Control() {
                 onChange={(v) => set({ nearestN: v })} />
             </Row>
           )}
+          <Row label="Font size">
+            <Slider value={cfg.labelSizePx} min={8} max={24} step={1} unit="px"
+              onChange={(v) => set({ labelSizePx: v })} />
+          </Row>
           <div className="chips">
             {(Object.keys(FIELD_LABELS) as (keyof ShowFields)[]).map((k) => (
               <button key={k}
