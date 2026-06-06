@@ -69,7 +69,7 @@ export class Connection {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.closed) this.open();
-    }, 1500);
+    }, 500);
   }
 
   private onMessage(raw: string): void {
