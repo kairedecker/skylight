@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Config, ShowFields } from "@shared/index.js";
+import {
+  toDisplayRadius, fromDisplayRadius,
+  toDisplayAltitude, fromDisplayAltitude,
+} from "@shared/index.js";
 import { useStream } from "../lib/useStream.js";
 import { nextISSPass, type Tle } from "../display/celestial.js";
 import { ColorRow, Row, Section, Segmented, Slider, Toggle } from "./components.js";
@@ -68,8 +72,18 @@ export function Control() {
           <span className={`dot ${state.connected ? "ok" : "bad"}`} />
           Ceiling Tracker
         </div>
-        <div className="stat">
-          {state.status?.source ?? "—"} · {state.aircraft.length} overhead
+        <div className="topbar-right">
+          <div className="stat">
+            {state.status?.source ?? "—"} · {state.aircraft.length} overhead
+          </div>
+          <div className="unit-toggle">
+            <button
+              className={`unit-btn ${cfg.units === "metric" ? "active" : ""}`}
+              onClick={() => set({ units: "metric" })}>km / m</button>
+            <button
+              className={`unit-btn ${cfg.units === "imperial" ? "active" : ""}`}
+              onClick={() => set({ units: "imperial" })}>mi / ft</button>
+          </div>
         </div>
       </header>
 
@@ -90,8 +104,13 @@ export function Control() {
               onChange={(v) => set({ labelRotationDeg: v })} />
           </Row>
           <Row label="Radius">
-            <Slider value={cfg.radiusMiles} min={0.5} max={10} step={0.5} unit="mi"
-              onChange={(v) => set({ radiusMiles: v })} />
+            {cfg.units === "metric" ? (
+              <Slider value={toDisplayRadius(cfg.radiusKm, "metric")} min={0.5} max={16} step={0.5} unit="km"
+                onChange={(v) => set({ radiusKm: fromDisplayRadius(v, "metric") })} />
+            ) : (
+              <Slider value={Math.round(toDisplayRadius(cfg.radiusKm, "imperial") * 10) / 10} min={0.5} max={10} step={0.5} unit="mi"
+                onChange={(v) => set({ radiusKm: fromDisplayRadius(v, "imperial") })} />
+            )}
           </Row>
         </Section>
 
@@ -151,12 +170,22 @@ export function Control() {
 
         <Section title="Filters">
           <Row label="Min altitude" hint="hide ground/taxi">
-            <Slider value={cfg.minAltitudeFt} min={0} max={10000} step={100} unit="ft"
-              onChange={(v) => set({ minAltitudeFt: v })} />
+            {cfg.units === "metric" ? (
+              <Slider value={Math.round(toDisplayAltitude(cfg.minAltitudeM, "metric"))} min={0} max={3000} step={50} unit="m"
+                onChange={(v) => set({ minAltitudeM: fromDisplayAltitude(v, "metric") })} />
+            ) : (
+              <Slider value={Math.round(toDisplayAltitude(cfg.minAltitudeM, "imperial") / 100) * 100} min={0} max={10000} step={100} unit="ft"
+                onChange={(v) => set({ minAltitudeM: fromDisplayAltitude(v, "imperial") })} />
+            )}
           </Row>
           <Row label="Max altitude">
-            <Slider value={cfg.maxAltitudeFt} min={1000} max={60000} step={1000} unit="ft"
-              onChange={(v) => set({ maxAltitudeFt: v })} />
+            {cfg.units === "metric" ? (
+              <Slider value={Math.round(toDisplayAltitude(cfg.maxAltitudeM, "metric"))} min={300} max={18000} step={300} unit="m"
+                onChange={(v) => set({ maxAltitudeM: fromDisplayAltitude(v, "metric") })} />
+            ) : (
+              <Slider value={Math.round(toDisplayAltitude(cfg.maxAltitudeM, "imperial") / 1000) * 1000} min={1000} max={60000} step={1000} unit="ft"
+                onChange={(v) => set({ maxAltitudeM: fromDisplayAltitude(v, "imperial") })} />
+            )}
           </Row>
           <Row label="Hide aircraft on ground">
             <Toggle value={cfg.hideOnGround} onChange={(v) => set({ hideOnGround: v })} />

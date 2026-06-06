@@ -10,15 +10,15 @@ export interface Aircraft {
 
   lat?: number;
   lon?: number;
-  /** Barometric altitude in feet, or null when on ground. */
+  /** Barometric altitude in meters, or null when on ground. */
   altBaro?: number | null;
-  /** Geometric altitude in feet. */
+  /** Geometric altitude in meters. */
   altGeom?: number | null;
-  /** Ground speed, knots. */
+  /** Ground speed, km/h. */
   gs?: number;
   /** Track / heading over ground, degrees. */
   track?: number;
-  /** Vertical rate, ft/min (positive = climbing). */
+  /** Vertical rate, m/min (positive = climbing). */
   baroRate?: number | null;
   squawk?: string;
   category?: string;

@@ -58,10 +58,10 @@ export function Display() {
           break;
         }
         case "[":
-          conn.patchConfig({ radiusMiles: Math.max(0.5, c.radiusMiles - 0.5) });
+          conn.patchConfig({ radiusKm: Math.max(0.5, c.radiusKm - 1) });
           break;
         case "]":
-          conn.patchConfig({ radiusMiles: c.radiusMiles + 0.5 });
+          conn.patchConfig({ radiusKm: c.radiusKm + 1 });
           break;
         case "h":
           conn.patchConfig({ showHud: !c.showHud });
@@ -82,7 +82,7 @@ export function Display() {
           <span>
             {state.status?.source ?? "—"} · {state.aircraft.length} ac ·{" "}
             rot {cfg.rotationDeg}° · mirror {cfg.mirrorX ? "X" : "–"}
-            {cfg.mirrorY ? "Y" : ""} · r {cfg.radiusMiles}mi · {cfg.theme}
+            {cfg.mirrorY ? "Y" : ""} · r {cfg.radiusKm}km · {cfg.theme}
           </span>
         </div>
       )}

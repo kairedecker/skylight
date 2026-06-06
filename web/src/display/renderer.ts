@@ -16,8 +16,11 @@ import {
   pxPerMeter,
   deadReckon,
   rangeMeters,
-  metersToMiles,
+  metersToKm,
   EMERGENCY_SQUAWKS,
+  formatAltitude,
+  formatSpeed,
+  formatDistance,
   type Aircraft,
   type Config,
   type Meters,
@@ -53,11 +56,11 @@ type ProjOpts = Parameters<typeof project>[1];
 // Altitude colour ramp — warm low, cool high. Tuned to glow on black.
 const ALT_STOPS: [number, [number, number, number]][] = [
   [0, [255, 138, 61]], // amber (ground / pattern)
-  [4000, [255, 198, 92]], // gold
-  [10000, [120, 224, 196]], // teal
-  [20000, [110, 178, 255]], // sky blue
-  [30000, [150, 150, 255]], // periwinkle
-  [40000, [232, 236, 255]], // near-white
+  [1220, [255, 198, 92]], // gold
+  [3050, [120, 224, 196]], // teal
+  [6100, [110, 178, 255]], // sky blue
+  [9150, [150, 150, 255]], // periwinkle
+  [12200, [232, 236, 255]], // near-white
 ];
 
 function altRamp(alt: number): [number, number, number] {
@@ -85,7 +88,7 @@ interface Visible {
   m: Meters;
   p: Point;
   heading: number;
-  rangeMi: number;
+  rangeKm: number;
   alpha: number;
   color: [number, number, number];
   emergency: boolean;
@@ -200,8 +203,8 @@ export class Renderer {
     if (cfg.hideOnGround && ac.onGround) return false;
     const alt = ac.altBaro ?? ac.altGeom;
     if (alt != null) {
-      if (alt < cfg.minAltitudeFt) return false;
-      if (alt > cfg.maxAltitudeFt) return false;
+      if (alt < cfg.minAltitudeM) return false;
+      if (alt > cfg.maxAltitudeM) return false;
     }
     return true;
   }
@@ -247,7 +250,7 @@ export class Renderer {
     ctx.fillStyle = cfg.palette.bg;
     ctx.fillRect(0, 0, this.w, this.h);
 
-    const pxPerM = pxPerMeter(this.w, this.h, cfg.radiusMiles);
+    const pxPerM = pxPerMeter(this.w, this.h, cfg.radiusKm);
     const proj: ProjOpts = {
       rotationDeg: cfg.rotationDeg,
       mirrorX: cfg.mirrorX,
@@ -283,22 +286,22 @@ export class Renderer {
       const m = this.sampleAt(tr, tt, cfg);
       if (!m) continue;
 
-      const rangeMi = metersToMiles(rangeMeters(m));
-      if (rangeMi > cfg.radiusMiles * 1.08) continue;
+      const rangeKm = metersToKm(rangeMeters(m));
+      if (rangeKm > cfg.radiusKm * 1.08) continue;
 
       const p = project(m, proj);
       const heading = this.screenHeading(tr, tt, proj);
-      const edgeFade = clamp01((cfg.radiusMiles - rangeMi) / (cfg.radiusMiles * 0.14));
+      const edgeFade = clamp01((cfg.radiusKm - rangeKm) / (cfg.radiusKm * 0.14));
       const alpha = clamp01(edgeFade) * tr.life * cfg.brightness;
       const alt = tr.ac.altBaro ?? tr.ac.altGeom ?? 0;
       const color = cfg.altitudeColor ? altRamp(alt) : hexToRgb(cfg.palette.glyph);
       const emergency = cfg.highlightEmergency && !!tr.ac.squawk && EMERGENCY_SQUAWKS.has(tr.ac.squawk);
 
-      visible.push({ tr, m, p, heading, rangeMi, alpha, color, emergency });
+      visible.push({ tr, m, p, heading, rangeKm, alpha, color, emergency });
     }
 
     // Nearest last so it paints on top.
-    visible.sort((a, b) => b.rangeMi - a.rangeMi);
+    visible.sort((a, b) => b.rangeKm - a.rangeKm);
 
     // Trails + glyphs for everyone.
     if (cfg.showDestArc) for (const v of visible) this.drawDestArc(cfg, proj, v);
@@ -359,14 +362,22 @@ export class Renderer {
 
     if (cfg.rangeRings) {
       ctx.save();
-      for (let mi = 1; mi <= Math.floor(cfg.radiusMiles); mi++) {
-        const r = mi * 1609.34 * proj.pxPerM;
+      ctx.font = `300 10px ${cfg.fonts.label}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      for (let km = 1; km <= Math.floor(cfg.radiusKm); km++) {
+        const r = km * 1000 * proj.pxPerM;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.strokeStyle = rgba(hexToRgb(cfg.palette.grid), 0.5 * cfg.brightness);
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 7]);
         ctx.stroke();
+        const label = cfg.units === "imperial"
+          ? `${(km * 0.621371).toFixed(1)} mi`
+          : `${km} km`;
+        ctx.fillStyle = rgba(hexToRgb(cfg.palette.grid), 0.55 * cfg.brightness);
+        ctx.fillText(label, cx + r + 3, cy);
       }
       ctx.setLineDash([]);
       // Center mark.
@@ -418,7 +429,7 @@ export class Renderer {
         const a = this.toScreen(r.le, cfg, proj);
         const b = this.toScreen(r.he, cfg, proj);
         // True runway width in px, nudged up a touch so it stays legible.
-        const wpx = Math.max(2.5, r.widthFt * 0.3048 * proj.pxPerM * 1.4);
+        const wpx = Math.max(2.5, r.widthM * proj.pxPerM * 1.4);
 
         ctx.save();
         ctx.lineCap = "butt";
@@ -495,7 +506,7 @@ export class Renderer {
 
   /** Place an (azimuth, altitude) sky point on the field. Zenith=center, horizon=edge. */
   private projectSky(az: number, alt: number, cfg: Config, proj: ProjOpts): Point {
-    const R = cfg.radiusMiles * 1609.34;
+    const R = cfg.radiusKm * 1000;
     const r = (1 - Math.max(0, alt) / 90) * R;
     const a = (az * Math.PI) / 180;
     return project({ east: Math.sin(a) * r, north: Math.cos(a) * r }, proj);
@@ -651,7 +662,7 @@ export class Renderer {
     if (ac.lat == null || ac.lon == null || ac.destLat == null || ac.destLon == null) return;
     if (!routePlausible(ac, cfg)) return;
     const brg = bearing(ac.lat, ac.lon, ac.destLat, ac.destLon) * (Math.PI / 180);
-    const stepM = cfg.radiusMiles * 1609.34 * 0.5;
+    const stepM = cfg.radiusKm * 1000 * 0.5;
     const ahead = project(
       { east: v.m.east + Math.sin(brg) * stepM, north: v.m.north + Math.cos(brg) * stepM },
       proj,
@@ -803,9 +814,9 @@ export class Renderer {
     const alt = ac.altBaro ?? ac.altGeom;
     if (f.altitude) {
       if (ac.onGround) sub.push("GND");
-      else if (alt != null) sub.push(`${alt.toLocaleString("en-US")} ft`);
+      else if (alt != null) sub.push(formatAltitude(alt, cfg.units));
     }
-    if (f.speed && ac.gs != null) sub.push(`${Math.round(ac.gs)} kt`);
+    if (f.speed && ac.gs != null) sub.push(formatSpeed(ac.gs, cfg.units));
     if (sub.length) out.push({ text: sub.join("   "), kind: "sub" });
 
     if (f.destination && ac.destination && routePlausible(ac, cfg)) {
@@ -814,8 +825,8 @@ export class Renderer {
       if (cfg.showRouteDetail && ac.destLat != null && ac.destLon != null) {
         const bits: string[] = [`${localTimeAt(ac.destLon)} local`];
         if (ac.lat != null && ac.lon != null) {
-          const mi = Math.round(greatCircleMiles(ac.lat, ac.lon, ac.destLat, ac.destLon));
-          if (mi > 1) bits.push(`${mi.toLocaleString("en-US")} mi to go`);
+          const km = Math.round(greatCircleKm(ac.lat, ac.lon, ac.destLat, ac.destLon));
+          if (km > 1) bits.push(`${formatDistance(km, cfg.units)} to go`);
         }
         out.push({ text: bits.join("   ·   "), kind: "sub" });
       }
@@ -944,8 +955,8 @@ export class Renderer {
     const bits = [
       ac.airline,
       ac.typeName ?? ac.typeCode,
-      ac.onGround ? "on ground" : dpAlt != null ? `${dpAlt.toLocaleString("en-US")} ft` : null,
-      ac.gs != null ? `${Math.round(ac.gs)} kt` : null,
+      ac.onGround ? "on ground" : dpAlt != null ? formatAltitude(dpAlt, cfg.units) : null,
+      ac.gs != null ? formatSpeed(ac.gs, cfg.units) : null,
       ac.origin && ac.destination && routePlausible(ac, cfg) ? `${ac.origin} → ${ac.destination}` : null,
     ].filter(Boolean);
     ctx.fillText(bits.join("    ·    "), x, y + 26);
@@ -981,14 +992,14 @@ function bearing(lat1: number, lon1: number, lat2: number, lon2: number): number
   return (Math.atan2(y, x) / DEG + 360) % 360;
 }
 
-/** Great-circle distance in statute miles. */
-function greatCircleMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+/** Great-circle distance in km. */
+function greatCircleKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const φ1 = lat1 * DEG;
   const φ2 = lat2 * DEG;
   const dφ = (lat2 - lat1) * DEG;
   const dλ = (lon2 - lon1) * DEG;
   const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 /** Longitude-based mean solar time at a place (no DST/tz db) as HH:MM. */
@@ -1002,14 +1013,14 @@ function localTimeAt(lon: number): string {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-/** Cross-track distance (miles) of a point from the great circle p1→p2. */
-function crossTrackMiles(
+/** Cross-track distance (km) of a point from the great circle p1→p2. */
+function crossTrackKm(
   lat: number, lon: number,
   lat1: number, lon1: number,
   lat2: number, lon2: number,
 ): number {
-  const R = 3958.8;
-  const d13 = greatCircleMiles(lat1, lon1, lat, lon) / R; // angular (rad)
+  const R = 6371;
+  const d13 = greatCircleKm(lat1, lon1, lat, lon) / R; // angular (rad)
   const θ13 = bearing(lat1, lon1, lat, lon) * DEG;
   const θ12 = bearing(lat1, lon1, lat2, lon2) * DEG;
   return Math.asin(Math.sin(d13) * Math.sin(θ13 - θ12)) * R;
@@ -1032,14 +1043,14 @@ function routePlausible(ac: Aircraft, cfg: Config): boolean {
 
   // (a) geographic consistency
   const nearPlane = (la?: number, lo?: number) =>
-    la != null && lo != null && greatCircleMiles(ac.lat!, ac.lon!, la, lo) < 80;
+    la != null && lo != null && greatCircleKm(ac.lat!, ac.lon!, la, lo) < 130;
   let geomOk = nearPlane(ac.originLat, ac.originLon) || nearPlane(ac.destLat, ac.destLon);
   if (
     !geomOk &&
     ac.originLat != null && ac.originLon != null &&
     ac.destLat != null && ac.destLon != null
   ) {
-    geomOk = Math.abs(crossTrackMiles(ac.lat, ac.lon, ac.originLat, ac.originLon, ac.destLat, ac.destLon)) < 130;
+    geomOk = Math.abs(crossTrackKm(ac.lat, ac.lon, ac.originLat, ac.originLon, ac.destLat, ac.destLon)) < 210;
   } else if (!geomOk && (ac.originLat == null || ac.destLat == null)) {
     geomOk = true; // only one endpoint known and not near — can't judge, allow
   }
@@ -1047,10 +1058,10 @@ function routePlausible(ac: Aircraft, cfg: Config): boolean {
 
   // (b) vertical-trend consistency for low, nearby traffic
   const alt = ac.altBaro ?? ac.altGeom;
-  const localTraffic = greatCircleMiles(ac.lat, ac.lon, cfg.centerLat, cfg.centerLon) < 30;
+  const localTraffic = greatCircleKm(ac.lat, ac.lon, cfg.centerLat, cfg.centerLon) < 48;
   const localAirport = (la?: number, lo?: number) =>
-    la != null && lo != null && greatCircleMiles(cfg.centerLat, cfg.centerLon, la, lo) < 45;
-  if (localTraffic && alt != null && alt < 12000 && ac.baroRate != null && Math.abs(ac.baroRate) > 250) {
+    la != null && lo != null && greatCircleKm(cfg.centerLat, cfg.centerLon, la, lo) < 72;
+  if (localTraffic && alt != null && alt < 3660 && ac.baroRate != null && Math.abs(ac.baroRate) > 76) {
     if (ac.baroRate > 0) {
       if (ac.originLat != null && !localAirport(ac.originLat, ac.originLon)) return false; // departing
     } else {

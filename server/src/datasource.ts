@@ -29,16 +29,17 @@ interface RawAircraft {
 function normalize(raw: RawAircraft, ts: number): Aircraft | null {
   if (!raw.hex) return null;
   const onGround = raw.alt_baro === "ground";
+  const ftToM = (ft: number) => ft * 0.3048;
   return {
     hex: raw.hex,
     flight: raw.flight?.trim() || undefined,
     lat: raw.lat,
     lon: raw.lon,
-    altBaro: onGround ? null : (raw.alt_baro as number | undefined) ?? null,
-    altGeom: raw.alt_geom ?? null,
-    gs: raw.gs,
+    altBaro: onGround ? null : raw.alt_baro != null ? ftToM(raw.alt_baro as number) : null,
+    altGeom: raw.alt_geom != null ? ftToM(raw.alt_geom) : null,
+    gs: raw.gs != null ? raw.gs * 1.852 : undefined,
     track: raw.track,
-    baroRate: raw.baro_rate ?? null,
+    baroRate: raw.baro_rate != null ? ftToM(raw.baro_rate) : null,
     squawk: raw.squawk,
     category: raw.category,
     onGround,
@@ -50,10 +51,23 @@ function normalize(raw: RawAircraft, ts: number): Aircraft | null {
   };
 }
 
-const NM_PER_MILE = 0.868976;
+const NM_PER_KM = 0.539957;
+
+class RateLimitError extends Error {
+  constructor(public readonly retryAfterMs: number) {
+    super(`HTTP 429 — retry after ${retryAfterMs}ms`);
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 async function fetchJson(url: string): Promise<any> {
   const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (res.status === 429) {
+    const retryAfter = res.headers.get("Retry-After");
+    const retryMs = retryAfter ? parseFloat(retryAfter) * 1000 : 5_000;
+    throw new RateLimitError(retryMs);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -114,8 +128,9 @@ interface StickyEnrichment {
 }
 
 export class Poller {
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private apiTimer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private apiTimer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
   private status: SourceStatus;
   private last: Aircraft[] = [];
   /** Most recent API snapshot, used to supplement the radio. */
@@ -144,19 +159,48 @@ export class Poller {
   }
 
   start(): void {
-    if (this.timer) return;
-    void this.tick();
-    this.timer = setInterval(() => void this.tick(), this.o.pollMs);
-    if (this.o.supplementApi) {
-      void this.refreshApi();
-      this.apiTimer = setInterval(() => void this.refreshApi(), this.o.apiPollMs);
-    }
+    if (this.running) return;
+    this.running = true;
+    void this.loop();
+    if (this.o.supplementApi && this.o.source === "radio") void this.apiLoop();
   }
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    if (this.apiTimer) clearInterval(this.apiTimer);
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
+    if (this.apiTimer) clearTimeout(this.apiTimer);
     this.timer = null;
     this.apiTimer = null;
+  }
+
+  private async loop(): Promise<void> {
+    try {
+      await this.tick();
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        const secs = Math.round(err.retryAfterMs / 1000);
+        this.status = { ...this.status, ok: false, message: `rate limited — pausing ${secs}s` };
+        this.o.onStatus(this.status);
+        await sleep(err.retryAfterMs);
+      }
+    }
+    if (this.running) {
+      this.timer = setTimeout(() => void this.loop(), this.o.pollMs);
+    }
+  }
+
+  private async apiLoop(): Promise<void> {
+    try {
+      await this.refreshApi();
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        const secs = Math.round(err.retryAfterMs / 1000);
+        console.warn(`[poller] API supplement rate limited — pausing ${secs}s`);
+        await sleep(err.retryAfterMs);
+      }
+    }
+    if (this.running) {
+      this.apiTimer = setTimeout(() => void this.apiLoop(), this.o.apiPollMs);
+    }
   }
 
   private async fetchList(source: DataSource, now: number): Promise<Aircraft[] | null> {
@@ -170,7 +214,8 @@ export class Poller {
         if (ac) list.push(ac);
       }
       return list;
-    } catch {
+    } catch (err) {
+      if (err instanceof RateLimitError) throw err;
       return null;
     }
   }
@@ -182,7 +227,7 @@ export class Poller {
 
   private buildApiUrl(): string {
     const c = this.o.getConfig();
-    const r = Math.min(250, Math.ceil(c.radiusMiles * NM_PER_MILE) + 1);
+    const r = Math.min(250, Math.ceil(c.radiusKm * NM_PER_KM) + 1);
     return this.o.apiUrlTemplate
       .replace("{lat}", String(c.centerLat))
       .replace("{lon}", String(c.centerLon))

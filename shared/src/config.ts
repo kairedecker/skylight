@@ -6,6 +6,7 @@
 export type Theme = "ambient" | "telemetry" | "focus";
 export type LabelDensity = "all" | "nearestN" | "nearestOnly";
 export type DataSource = "radio" | "api";
+export type Units = "metric" | "imperial";
 
 export interface Palette {
   bg: string;
@@ -39,7 +40,7 @@ export interface Config {
   // --- location & scope ---
   centerLat: number;
   centerLon: number;
-  radiusMiles: number;
+  radiusKm: number;
 
   // --- calibration (tune against a real overhead pass) ---
   /** Rotate the whole field, degrees. */
@@ -53,8 +54,8 @@ export interface Config {
   labelRotationDeg: number;
 
   // --- filtering ---
-  minAltitudeFt: number;
-  maxAltitudeFt: number;
+  minAltitudeM: number;
+  maxAltitudeM: number;
   hideOnGround: boolean;
 
   // --- motion ---
@@ -67,6 +68,10 @@ export interface Config {
   /** Cap the render loop, frames per second. 0 = uncapped (use display
    *  refresh rate). Lower this to cut GPU/CPU load (and laptop fan noise). */
   maxFps: number;
+
+  // --- units ---
+  /** Display unit system. Internal storage is always metric. */
+  units: Units;
 
   // --- visuals ---
   theme: Theme;
@@ -111,19 +116,18 @@ export interface Config {
 }
 
 export const DEFAULT_CONFIG: Config = {
-  // Default center: San Francisco International (SFO). Set this to your own
-  // location — ideally where you'll be looking up at the ceiling.
-  centerLat: 37.6213,
-  centerLon: -122.379,
-  radiusMiles: 3,
+  // Default center: Frankfurt Airport (FRA). Override via server/data/config.json (gitignored).
+  centerLat: 50.0379,
+  centerLon: 8.5622,
+  radiusKm: 6.4,
 
   rotationDeg: 0,
   mirrorX: true,
   mirrorY: false,
   labelRotationDeg: 0,
 
-  minAltitudeFt: 100,
-  maxAltitudeFt: 60000,
+  minAltitudeM: 30,
+  maxAltitudeM: 18300,
   hideOnGround: true,
 
   interpolate: true,
@@ -131,6 +135,8 @@ export const DEFAULT_CONFIG: Config = {
   staleSec: 20,
   smoothing: 0.18,
   maxFps: 0,
+
+  units: "metric",
 
   theme: "ambient",
   palette: {

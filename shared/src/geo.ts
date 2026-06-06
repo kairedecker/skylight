@@ -1,7 +1,5 @@
 // Pure geo/projection math. No DOM, no state — shared by display + server.
 
-const M_PER_MILE = 1609.34;
-const KT_TO_MS = 0.514444;
 const DEG = Math.PI / 180;
 
 export interface Meters {
@@ -16,7 +14,7 @@ export interface Point {
 
 /**
  * Flat-earth approximation of lat/lon -> local meters relative to a center.
- * Plenty accurate within a few miles.
+ * Plenty accurate within a few km.
  */
 export function llToMeters(
   lat: number,
@@ -34,17 +32,17 @@ export function rangeMeters(m: Meters): number {
   return Math.hypot(m.east, m.north);
 }
 
-export function metersToMiles(m: number): number {
-  return m / M_PER_MILE;
+export function metersToKm(m: number): number {
+  return m / 1000;
 }
 
-/** Pixels per meter so that `radiusMiles` fills half of the smaller screen axis. */
+/** Pixels per meter so that `radiusKm` fills half of the smaller screen axis. */
 export function pxPerMeter(
   screenW: number,
   screenH: number,
-  radiusMiles: number,
+  radiusKm: number,
 ): number {
-  return Math.min(screenW, screenH) / 2 / (radiusMiles * M_PER_MILE);
+  return Math.min(screenW, screenH) / 2 / (radiusKm * 1000);
 }
 
 export interface ProjectOpts {
@@ -78,11 +76,11 @@ export function project(m: Meters, o: ProjectOpts): Point {
 export function deadReckon(
   m: Meters,
   trackDeg: number | undefined,
-  gsKt: number | undefined,
+  gsKmh: number | undefined,
   dtSec: number,
 ): Meters {
-  if (trackDeg == null || gsKt == null || gsKt <= 0) return m;
-  const dist = gsKt * KT_TO_MS * dtSec;
+  if (trackDeg == null || gsKmh == null || gsKmh <= 0) return m;
+  const dist = (gsKmh / 3.6) * dtSec; // km/h → m/s → meters
   const t = trackDeg * DEG;
   return {
     east: m.east + dist * Math.sin(t),

@@ -18,9 +18,13 @@ export interface HubDeps {
   getStatus: () => SourceStatus;
 }
 
+const AIRCRAFT_DEBOUNCE_MS = 200;
+
 export class Hub {
   private wss: WebSocketServer;
   private clients = new Set<WebSocket>();
+  private lastAircraftBroadcast = 0;
+  private pendingAircraft: ReturnType<typeof setTimeout> | null = null;
 
   constructor(server: Server, private deps: HubDeps) {
     this.wss = new WebSocketServer({ server, path: "/ws" });
@@ -67,7 +71,21 @@ export class Hub {
   }
 
   broadcastAircraft(now: number, aircraft: Aircraft[]): void {
-    this.broadcast({ type: "aircraft", now, aircraft });
+    if (this.pendingAircraft) {
+      clearTimeout(this.pendingAircraft);
+      this.pendingAircraft = null;
+    }
+    const elapsed = Date.now() - this.lastAircraftBroadcast;
+    if (elapsed >= AIRCRAFT_DEBOUNCE_MS) {
+      this.lastAircraftBroadcast = Date.now();
+      this.broadcast({ type: "aircraft", now, aircraft });
+    } else {
+      this.pendingAircraft = setTimeout(() => {
+        this.pendingAircraft = null;
+        this.lastAircraftBroadcast = Date.now();
+        this.broadcast({ type: "aircraft", now, aircraft });
+      }, AIRCRAFT_DEBOUNCE_MS - elapsed);
+    }
   }
   broadcastStatus(status: SourceStatus): void {
     this.broadcast({ type: "status", status });
